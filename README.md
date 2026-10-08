@@ -8,7 +8,7 @@ I implemented all the arithmetic from scratch on the Python standard library. My
 
 ## Report
 
-- [My Lab 02 report (PDF)](report/Lab02_Report_Khusan_Ashuraliev.pdf)
+- [My Lab 02 report (PDF)](report/Lab02_Report_Khusanjon_Ashuraliev.pdf)
 - [`evidence/`](evidence/) — the output of my demo for Parts A–D and both of my test runs
 
 ## Usage

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Lab 02 — Elliptic curves, ECDSA, HD wallets and post-quantum cost · Khusan Ashuraliev</title>
+<title>Lab 02 — Elliptic curves, ECDSA, HD wallets and post-quantum cost · Khusanjon Ashuraliev</title>
 <style>
   @page { size: A4; margin: 18mm 17mm 18mm 17mm; }
   body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 10.2pt; line-height: 1.42; color: #1c1c1c; margin: 0; }
@@ -28,7 +28,7 @@
 <body>
 
 <h1>Lab 02 — Elliptic curves, ECDSA, HD wallets and post-quantum cost</h1>
-<div class="sub">Khusan Ashuraliev · Introduction to Blockchain Programming · Óbuda University, NIK · October 2026</div>
+<div class="sub">Khusanjon Ashuraliev · Introduction to Blockchain Programming · Óbuda University, NIK · October 2026</div>
 
 <table>
 <tr><th style="width:18%">Item</th><th>Value</th></tr>
@@ -38,7 +38,7 @@
 <tr><td>Reproduce</td><td><code>uv sync &amp;&amp; uv run pytest &amp;&amp; uv run python -m crypto_lab</code></td></tr>
 <tr><td>Tests</td><td><b>113 passed</b>: the course suite of 64 tests, copied unchanged, plus 49 own tests.</td></tr>
 </table>
-<p class="small">All output below is copied from my own implementation's run (<code>evidence/demo_*.txt</code>). The module and function names follow the course suite so that it runs unchanged; the code is my own.</p>
+<p class="small">I copied all output below from a run of my own implementation (<code>evidence/demo_*.txt</code>). I kept the module and function names of the course suite so that it runs unchanged; the code is my own.</p>
 
 <h2>1. Part A — curve arithmetic</h2>
 <h3>Group-law verification output</h3>
@@ -80,7 +80,7 @@ SEC1 serialisation of G:
 <p>My <code>scalar_mul</code> does not reduce the scalar first, so <code>scalar_mul(n, G)</code> really runs the full Double-and-Add over the 256 bits of n and lands on O only because addition, doubling and the modular inverse are all correct. That makes the check a real test of the arithmetic.</p>
 
 <h3>What would break if the implemented order were wrong by one</h3>
-<p>Take n′ = n ± 1 in place of n. Then n′·G = ±G, not O, and reduction mod n′ no longer matches what the curve does. Everything that reduces mod the order uses the wrong modulus:</p>
+<p>Suppose I had implemented n′ = n ± 1 in place of n. Then n′·G = ±G, not O, and reduction mod n′ no longer matches what the curve does. Everything that reduces mod the order uses the wrong modulus:</p>
 <ul>
 <li>the nonce inverse k⁻¹ is computed mod n′ (and n′ = n + 1 is even, so it is not even prime: Fermat's inverse stops being an inverse);</li>
 <li>s = k⁻¹(z + r·d) and the verifier's u₁ = z·s⁻¹, u₂ = r·s⁻¹ are reduced mod n′, so u₁·G + u₂·Q no longer equals k·G and <b>valid signatures stop verifying</b>;</li>
@@ -89,7 +89,7 @@ SEC1 serialisation of G:
 </ul>
 
 <h3>Constant-time variant</h3>
-<p><code>scalar_mul_ladder</code> is a Montgomery ladder: it always runs 256 iterations and each performs exactly one addition and one doubling, whatever the bit. It agrees with Double-and-Add on 20 random scalars in the demo and on 30+ scalars in the tests (including 1, n−1, n and 2<sup>256</sup>−1). Its limits are discussed in section 5.</p>
+<p><code>scalar_mul_ladder</code> is a Montgomery ladder: it always runs 256 iterations and each performs exactly one addition and one doubling, whatever the bit. I checked that it agrees with Double-and-Add on 20 random scalars in the demo and on 30+ scalars in my tests (including 1, n−1, n and 2<sup>256</sup>−1). Its limits are discussed in section 5.</p>
 
 <h2>2. Part B — ECDSA and nonce reuse</h2>
 <pre>private key d = 0xc0ffee00badc0de1234567890abcdef1122334455667788990aabbccddeeff00
@@ -126,7 +126,7 @@ The same attack for every low-s sign combination:
   second s flipped              : True
   both s flipped                : True</pre>
 
-<p>Every line of the README's expected table is <code>True</code>, the address is <code>0xa0f598084F711360A38D861F8Fb2100949170C09</code>, and the <b>recovered d equals the original d exactly</b>. The messages were SHA-256 of <code>"Lab 02: pay 1 ETH to Alice"</code> and <code>"Lab 02: pay 2 ETH to Bob"</code>.</p>
+<p>In my run every line of the README's expected table is <code>True</code>, the address is <code>0xa0f598084F711360A38D861F8Fb2100949170C09</code>, and the <b>recovered d equals the original d exactly</b>. As messages I used SHA-256 of <code>"Lab 02: pay 1 ETH to Alice"</code> and <code>"Lab 02: pay 2 ETH to Bob"</code>.</p>
 
 <h3>The attack</h3>
 <p>Both signatures use the same k, so both have the same R = k·G and the same r. Subtracting the two signing equations removes the unknown d:</p>
@@ -231,9 +231,9 @@ Addresses:
 <p>Shor's algorithm does not weaken ECDSA and Schnorr; it solves the discrete logarithm, so both fail completely. Replacements exist and are standardised, so the obstacle is size. A transaction grows by a factor of 8 to 37, and on a fixed block size throughput falls in the same proportion, from 7.75 tps to between 1.00 and 0.21. FN-DSA is the smallest but needs floating-point Gaussian sampling, which is hard to implement safely; SLH-DSA rests only on hash functions but has the largest signatures; ML-DSA is the middle option.</p>
 
 <h3>An asset that must stay secure for fifteen years: decide now or later?</h3>
-<p><b>Now.</b> The argument does not depend on when a quantum computer will exist.</p>
+<p><b>Now.</b> My argument does not depend on when a quantum computer will exist.</p>
 <p>A blockchain is public and permanent. Every public key that is on chain today (P2PK outputs, reused addresses, every Ethereum account that has transacted) can be copied today and kept. This is harvest now, decrypt later: the attacker does not need the machine at the time of collection, only at some point while the asset is still worth taking. For signatures the "decryption" is computing the private key from the stored public key and spending the coins.</p>
-<p>So the relevant quantities are two durations that we do know. The asset must stay secure for X = 15 years. Migration takes Y years: choosing a scheme, changing consensus rules, upgrading wallets and hardware, and getting every holder to move coins to new outputs, which on a decentralised chain is slow and never complete. If a capable machine appears after Z years, the asset is safe only if X + Y &lt; Z. We do not know Z, but with X = 15 and Y of several years, the condition already requires that no such machine exists for about two decades. Betting an asset on that is a decision in itself. And exposure cannot be undone later: a key that is public today stays public.</p>
+<p>So I look at two durations that we do know. The asset must stay secure for X = 15 years. Migration takes Y years: choosing a scheme, changing consensus rules, upgrading wallets and hardware, and getting every holder to move coins to new outputs, which on a decentralised chain is slow and never complete. If a capable machine appears after Z years, the asset is safe only if X + Y &lt; Z. We do not know Z, but with X = 15 and Y of several years, the condition already requires that no such machine exists for about two decades. Betting an asset on that is a decision in itself. And exposure cannot be undone later: a key that is public today stays public.</p>
 <p>The costs in the table make waiting more dangerous, not less: because post-quantum signatures cut throughput by an order of magnitude, the migration cannot be rushed through in a few blocks when a threat becomes concrete. In the meantime the cheap measure is to keep keys behind hashes: never reuse an address, and move long-term holdings to outputs whose public key has never been published.</p>
 
 <h2>5. Implementation risk</h2>
