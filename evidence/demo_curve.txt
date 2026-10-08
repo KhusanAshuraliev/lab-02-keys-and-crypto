@@ -1,0 +1,28 @@
+==============================================================================
+PART A -- curve arithmetic on secp256k1
+==============================================================================
+p = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f
+n = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
+G = Point(0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798, 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8)
+G on curve : True
+
+Group law checks:
+  n*G is the identity                 : True
+  (n-1)*G + G is the identity         : True
+  G + G == 2*G                        : True
+  double-and-add == Montgomery ladder : True   (20 random scalars)
+
+Edge cases:
+  G + O == G                          : True
+  G + (-G) is the identity            : True
+  (n-1)*G == -G                       : True
+
+2G:
+  x = 0xc6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+  y = 0x1ae168fea63dc339a3c58419466ceaeef7f632653266d0e1236431a950cfe52a
+
+SEC1 serialisation of G:
+  compressed   (33 B) : 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+  uncompressed (65 B) : 0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8
+  parse(serialise(G)) == G, both forms : True
+

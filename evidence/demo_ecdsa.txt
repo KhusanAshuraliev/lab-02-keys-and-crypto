@@ -1,0 +1,37 @@
+==============================================================================
+PART B -- ECDSA and the nonce
+==============================================================================
+private key d = 0xc0ffee00badc0de1234567890abcdef1122334455667788990aabbccddeeff00
+address       = 0xa0f598084F711360A38D861F8Fb2100949170C09
+
+Signature with an RFC 6979 nonce:
+  r = 0x85760d15466a56955362c0aec3f4a58d3013f16bdf18de581cc2bc383c55744f
+  s = 0x6c0877227536cd11c646e2f6457183bc8b1534f466a68dd73347d43c98882951
+  recovery id = 0
+  verifies                      : True
+  reproducible across runs      : True
+  rejects a different message   : True
+  low-s enforced (s <= n/2)     : True
+
+Public-key recovery:
+  recovered key matches signer  : True
+
+Malleability:
+  (r, n-s) also verifies        : True
+
+Nonce reuse -- two messages signed with the same k:
+  signature 1  r = 0x41eb18ff5ae68f6cb2f3c4000767e88e003f2e4af2193d3c973db291b16cec56
+               s = 0x4f31c38dc63ba7d0c1302247f0bba175951f0e86108f8cbbf4fb1e8f654f91ce
+  signature 2  r = 0x41eb18ff5ae68f6cb2f3c4000767e88e003f2e4af2193d3c973db291b16cec56
+               s = 0x5db4bccebdbc5d1a11cb889c60677205407db7e951f348b2a4f8b6c3cf4143de
+  identical r                   : True
+  original d    = 0xc0ffee00badc0de1234567890abcdef1122334455667788990aabbccddeeff00
+  recovered d   = 0xc0ffee00badc0de1234567890abcdef1122334455667788990aabbccddeeff00
+  attack succeeded : True
+
+The same attack for every low-s sign combination:
+  neither s flipped             : True
+  first s flipped               : True
+  second s flipped              : True
+  both s flipped                : True
+

@@ -1,0 +1,33 @@
+==============================================================================
+PART D -- post-quantum cost
+==============================================================================
+scheme              PQ     pk (B)  sig (B)  tx (B)   x ECDSA     tps
+--------------------------------------------------------------------
+ECDSA (secp256k1)   no         33       72     215      1.0x    7.75
+Schnorr (BIP-340)   no         32       64     206      1.0x    8.09
+ML-DSA-44           yes      1312     2420    3842     17.9x    0.43
+ML-DSA-65           yes      1952     3309    5371     25.0x    0.31
+SLH-DSA-128s        yes        32     7856    7998     37.2x    0.21
+FN-DSA-512          yes       897      666    1673      7.8x    1.00
+
+model: 1 signed input(s), 1 output, 110 B overhead, 1 MB block every 10 min
+
+Which coins can a quantum adversary actually attack?
+
+p2pkh_unspent         PROTECTED (for now)
+                      The chain holds only HASH160(pubkey). Shor's algorithm solves the discrete log of a public key and has nothing to work on here; Grover only square-roots a hash search. Protection ends when the output is spent and the key is revealed.
+
+p2pk                  EXPOSED
+                      The public key itself is the output script. This covers the earliest coinbase rewards, which have sat unmoved for over a decade.
+
+reused_address        EXPOSED
+                      An earlier spend from the address already published its public key, and funds still sit behind the same key.
+
+mempool_transaction   EXPOSED (briefly)
+                      From broadcast to confirmation the public key is visible while the coin is still unspent; an attacker who can derive the key within that window can race a conflicting spend.
+
+ethereum_any_active   EXPOSED
+                      Ethereum transactions carry (v, r, s) and the sender is found with ecrecover, so the public key of every account that has ever sent a transaction can be computed from chain data. Only never-used receiving accounts are still behind a hash.
+
+Harvest Now, Decrypt Later: the ledger is public and permanent, so every exposed public key can be collected today and attacked whenever the hardware exists. What decides the migration date is how long the asset must stay secure plus how long migration takes -- not a forecast of when a quantum computer appears.
+

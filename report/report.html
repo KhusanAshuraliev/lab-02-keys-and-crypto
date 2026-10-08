@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lab 02 — Elliptic curves, ECDSA, HD wallets and post-quantum cost · Khusan Ashuraliev</title>
+<style>
+  @page { size: A4; margin: 18mm 17mm 18mm 17mm; }
+  body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 10.2pt; line-height: 1.42; color: #1c1c1c; margin: 0; }
+  h1 { font-size: 21pt; margin: 0 0 2pt; }
+  h2 { font-size: 14pt; margin: 18pt 0 5pt; break-after: avoid; }
+  h3 { font-size: 11pt; margin: 12pt 0 3pt; break-after: avoid; }
+  p { margin: 0 0 7pt; }
+  .sub { color: #555; margin-bottom: 9pt; }
+  table { border-collapse: collapse; width: 100%; margin: 5pt 0 9pt; font-size: 9.2pt; break-inside: avoid; }
+  th { text-align: left; background: #f1f3f5; border-bottom: 1.2pt solid #333; padding: 3pt 6pt; }
+  td { border-bottom: 0.6pt solid #d5d8dc; padding: 3pt 6pt; vertical-align: top; }
+  td.n, th.n { text-align: right; }
+  code, pre { font-family: Menlo, Consolas, monospace; }
+  code { font-size: 8.8pt; }
+  pre { font-size: 7.1pt; line-height: 1.3; background: #f6f7f8; border: 0.6pt solid #d5d8dc; padding: 6pt 8pt; margin: 4pt 0 9pt; white-space: pre-wrap; word-break: break-all; break-inside: avoid; }
+  .note { background: #f6f7f8; border: 0.6pt solid #d5d8dc; padding: 5pt 8pt; margin: 5pt 0 9pt; break-inside: avoid; }
+  .small { font-size: 8.6pt; color: #555; }
+  .formula { font-family: Georgia, "Times New Roman", serif; font-size: 10.6pt; text-align: center; margin: 5pt 0 8pt; }
+  ul { margin: 0 0 7pt; padding-left: 16pt; }
+  li { margin-bottom: 2pt; }
+</style>
+</head>
+<body>
+
+<h1>Lab 02 — Elliptic curves, ECDSA, HD wallets and post-quantum cost</h1>
+<div class="sub">Khusan Ashuraliev · Introduction to Blockchain Programming · Óbuda University, NIK · October 2026</div>
+
+<table>
+<tr><th style="width:18%">Item</th><th>Value</th></tr>
+<tr><td>Repository</td><td><code>https://github.com/KhusanAshuraliev/lab-02-keys-and-crypto</code></td></tr>
+<tr><td>Stack</td><td>Python 3.11+ with uv. Standard library only, plus <code>pycryptodome</code> for Keccak-256. No <code>ecdsa</code>, <code>coincurve</code>, <code>eth-keys</code> or <code>bip_utils</code>.</td></tr>
+<tr><td>Evidence</td><td>Output of every demonstration and both test runs: <code>evidence/</code> in the repository</td></tr>
+<tr><td>Reproduce</td><td><code>uv sync &amp;&amp; uv run pytest &amp;&amp; uv run python -m crypto_lab</code></td></tr>
+<tr><td>Tests</td><td><b>113 passed</b>: the course suite of 64 tests, copied unchanged, plus 49 own tests.</td></tr>
+</table>
+<p class="small">All output below is copied from my own implementation's run (<code>evidence/demo_*.txt</code>). The module and function names follow the course suite so that it runs unchanged; the code is my own.</p>
+
+<h2>1. Part A — curve arithmetic</h2>
+<h3>Group-law verification output</h3>
+<pre>p = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f
+n = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
+G = Point(0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798, 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8)
+G on curve : True
+
+Group law checks:
+  n*G is the identity                 : True
+  (n-1)*G + G is the identity         : True
+  G + G == 2*G                        : True
+  double-and-add == Montgomery ladder : True   (20 random scalars)
+
+Edge cases:
+  G + O == G                          : True
+  G + (-G) is the identity            : True
+  (n-1)*G == -G                       : True
+
+2G:
+  x = 0xc6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+  y = 0x1ae168fea63dc339a3c58419466ceaeef7f632653266d0e1236431a950cfe52a
+
+SEC1 serialisation of G:
+  compressed   (33 B) : 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+  uncompressed (65 B) : 0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8
+  parse(serialise(G)) == G, both forms : True</pre>
+
+<table>
+<tr><th style="width:44%">Check</th><th>Result</th><th style="width:30%">README expects</th></tr>
+<tr><td><code>G on curve</code> and the four group-law checks</td><td>all <code>True</code></td><td>all <code>True</code> ✓</td></tr>
+<tr><td>x-coordinate of <code>2G</code></td><td><code>0xc6047f94…5c709ee5</code></td><td>published value ✓</td></tr>
+<tr><td>Course test suite</td><td>64 passed</td><td>64 passed ✓</td></tr>
+</table>
+
+<h3>Why n·G = O must hold</h3>
+<p>The points of secp256k1 form a finite group under addition, and G generates a cyclic subgroup of it. Adding G to itself repeatedly cannot produce new points forever, so the sequence G, 2G, 3G, … must return to the identity O. The smallest positive n with n·G = O is the <b>order</b> of G. For secp256k1 the whole curve has prime order n, so every point other than O has exactly this order.</p>
+<p>The consequence is that scalars only matter modulo n: (k + n)·G = k·G + n·G = k·G. Private keys, nonces and signatures therefore live in Z<sub>n</sub>, and every scalar computation in ECDSA is reduced mod n. The second check says the same thing from the other side: (n−1)·G is the inverse of G, so adding G gives O.</p>
+<p>My <code>scalar_mul</code> does not reduce the scalar first, so <code>scalar_mul(n, G)</code> really runs the full Double-and-Add over the 256 bits of n and lands on O only because addition, doubling and the modular inverse are all correct. That makes the check a real test of the arithmetic.</p>
+
+<h3>What would break if the implemented order were wrong by one</h3>
+<p>Take n′ = n ± 1 in place of n. Then n′·G = ±G, not O, and reduction mod n′ no longer matches what the curve does. Everything that reduces mod the order uses the wrong modulus:</p>
+<ul>
+<li>the nonce inverse k⁻¹ is computed mod n′ (and n′ = n + 1 is even, so it is not even prime: Fermat's inverse stops being an inverse);</li>
+<li>s = k⁻¹(z + r·d) and the verifier's u₁ = z·s⁻¹, u₂ = r·s⁻¹ are reduced mod n′, so u₁·G + u₂·Q no longer equals k·G and <b>valid signatures stop verifying</b>;</li>
+<li>the range checks on keys, nonces, r and s accept or reject the wrong values: with n + 1 the scalar n passes as a "valid" private key although its public key is the point at infinity;</li>
+<li>low-s normalisation n′ − s gives a value that is not the negation of s, so the flipped signature is invalid, and BIP-32 child keys (I<sub>L</sub> + k<sub>par</sub>) mod n′ no longer match the public derivation I<sub>L</sub>·G + K<sub>par</sub>.</li>
+</ul>
+
+<h3>Constant-time variant</h3>
+<p><code>scalar_mul_ladder</code> is a Montgomery ladder: it always runs 256 iterations and each performs exactly one addition and one doubling, whatever the bit. It agrees with Double-and-Add on 20 random scalars in the demo and on 30+ scalars in the tests (including 1, n−1, n and 2<sup>256</sup>−1). Its limits are discussed in section 5.</p>
+
+<h2>2. Part B — ECDSA and nonce reuse</h2>
+<pre>private key d = 0xc0ffee00badc0de1234567890abcdef1122334455667788990aabbccddeeff00
+address       = 0xa0f598084F711360A38D861F8Fb2100949170C09
+
+Signature with an RFC 6979 nonce:
+  r = 0x85760d15466a56955362c0aec3f4a58d3013f16bdf18de581cc2bc383c55744f
+  s = 0x6c0877227536cd11c646e2f6457183bc8b1534f466a68dd73347d43c98882951
+  recovery id = 0
+  verifies                      : True
+  reproducible across runs      : True
+  rejects a different message   : True
+  low-s enforced (s &lt;= n/2)     : True
+
+Public-key recovery:
+  recovered key matches signer  : True
+
+Malleability:
+  (r, n-s) also verifies        : True
+
+Nonce reuse -- two messages signed with the same k:
+  signature 1  r = 0x41eb18ff5ae68f6cb2f3c4000767e88e003f2e4af2193d3c973db291b16cec56
+               s = 0x4f31c38dc63ba7d0c1302247f0bba175951f0e86108f8cbbf4fb1e8f654f91ce
+  signature 2  r = 0x41eb18ff5ae68f6cb2f3c4000767e88e003f2e4af2193d3c973db291b16cec56
+               s = 0x5db4bccebdbc5d1a11cb889c60677205407db7e951f348b2a4f8b6c3cf4143de
+  identical r                   : True
+  original d    = 0xc0ffee00badc0de1234567890abcdef1122334455667788990aabbccddeeff00
+  recovered d   = 0xc0ffee00badc0de1234567890abcdef1122334455667788990aabbccddeeff00
+  attack succeeded : True
+
+The same attack for every low-s sign combination:
+  neither s flipped             : True
+  first s flipped               : True
+  second s flipped              : True
+  both s flipped                : True</pre>
+
+<p>Every line of the README's expected table is <code>True</code>, the address is <code>0xa0f598084F711360A38D861F8Fb2100949170C09</code>, and the <b>recovered d equals the original d exactly</b>. The messages were SHA-256 of <code>"Lab 02: pay 1 ETH to Alice"</code> and <code>"Lab 02: pay 2 ETH to Bob"</code>.</p>
+
+<h3>The attack</h3>
+<p>Both signatures use the same k, so both have the same R = k·G and the same r. Subtracting the two signing equations removes the unknown d:</p>
+<div class="formula">s₁ − s₂ = k⁻¹(z₁ − z₂) &nbsp;⟹&nbsp; k = (z₁ − z₂) / (s₁ − s₂), &nbsp;&nbsp; d = (s₁·k − z₁) / r &nbsp;&nbsp;(mod n)</div>
+<p>The attacker needs only the two signatures and the two message hashes, and the reuse is visible to anyone because the r values are equal.</p>
+<p><b>Low-s.</b> Real signatures are normalised, so either s may have been replaced by n − s, which is the signature made with −k. Flipping both only negates k and leaves d unchanged, so two cases remain: the signs agree (denominator s₁ − s₂) or differ (s₁ + s₂). My function computes d for both and returns the candidate whose public key d·G verifies both signatures. It returns the exact key in all four combinations, as shown above and asserted in <code>test_extra.py</code>.</p>
+
+<h3>Why RFC 6979 removes the vulnerability without making k predictable</h3>
+<p>RFC 6979 derives the nonce as k = HMAC-DRBG(d, z): a deterministic function of the private key and the message hash.</p>
+<ul>
+<li><b>k never repeats across messages.</b> A different message gives a different z and therefore a different k, so two different messages never share r under one key. Signing the same message twice gives the same signature, which reveals nothing new. The attack needs two <i>different</i> messages with one k, and that can no longer happen.</li>
+<li><b>k is still secret.</b> The private key d is the HMAC key. Someone who does not know d cannot compute k, and cannot distinguish it from a random value. Determinism only removes the dependence on a random number generator, which is what failed in the PlayStation 3 case (a fixed nonce) and in the 2013 Android wallets (a broken <code>SecureRandom</code>). It does not make k public.</li>
+</ul>
+<p>My implementation reproduces the widely published vector for key 1 and message "Satoshi Nakamoto" (k = <code>0x8f8a276c…74f15d15</code>), so the derivation agrees with other implementations.</p>
+
+<h2>3. Part C — HD wallets</h2>
+<pre>mnemonic   : abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+seed       : 5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc19a5ac40b389cd370d086206dec8aa6c43daea6690f20ad3d8d48b2d2ce9e38e4
+master key : 0x1837c1be8e2995ec11cda2b066151be2cfb48adf9e47b151d46adab3a21cdf67
+chain code : 7923408dadd3c7b56eed15567707ae5e5dca089de972e07f3b860450e2a3b70e
+
+Accounts:
+  m/44'/60'/0'/0/0  -&gt;  0x9858EfFD232B4033E47d90003D41EC34EcaEda94
+  m/44'/60'/0'/0/1  -&gt;  0x6Fac4D18c912343BF86fa7049364Dd4E424Ab9C0
+  m/44'/60'/0'/0/2  -&gt;  0xb6716976A3ebe8D39aCEB04372f22Ff8e6802D7A
+
+Same mnemonic, different passphrase (address 0):
+  passphrase ''                -&gt;  0x9858EfFD232B4033E47d90003D41EC34EcaEda94
+  passphrase 'correct horse'   -&gt;  0xFf0Bdf99513306994d4aF9949BA7cfA60204D285
+  passphrase 'correct horse '  -&gt;  0x67dA015b6A80F19822e5d270A7788F72f018a724
+
+Parent-key recovery from the xpub of m/44'/60'/0'/0 and child key /0:
+  xpub holds a private key      : False
+  recovered parent key          : 0xa29ac2cb17e31cdab42a8fe2d83f04f4b69c5e73bc8d3bf6b5dc96ac239b145a
+  matches the real parent : True
+  sibling /1 key now derivable  : True
+  same attack on a hardened child : refused -- hardened children are immune: I_L depends on the parent private key
+
+Watch-only derivation:
+  xpub-derived address matches : True
+  hardened child from an xpub  : refused -- hardened derivation requires the parent private key
+
+Addresses:
+  keccak256(b'')     = c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
+  sha3_256(b'')      = a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a   (a different function)
+  EIP-55 0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed  matches the EIP : True
+  EIP-55 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359  matches the EIP : True
+  EIP-55 0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB  matches the EIP : True
+  EIP-55 0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb  matches the EIP : True</pre>
+
+<table>
+<tr><th style="width:36%">Value</th><th>Result</th><th style="width:16%">Expected</th></tr>
+<tr><td>seed</td><td><code>5eb00bbddcf06908…f6da5fc1…</code></td><td>BIP-39 vector ✓</td></tr>
+<tr><td><code>m/44'/60'/0'/0/0</code></td><td><code>0x9858EfFD232B4033E47d90003D41EC34EcaEda94</code></td><td>✓</td></tr>
+<tr><td><code>m/44'/60'/0'/0/1</code></td><td><code>0x6Fac4D18c912343BF86fa7049364Dd4E424Ab9C0</code></td><td>✓</td></tr>
+<tr><td><code>m/44'/60'/0'/0/2</code></td><td><code>0xb6716976A3ebe8D39aCEB04372f22Ff8e6802D7A</code></td><td>✓</td></tr>
+<tr><td>passphrase <code>'correct horse'</code></td><td><code>0xFf0Bdf99513306994d4aF9949BA7cfA60204D285</code></td><td>✓</td></tr>
+<tr><td>passphrase <code>'correct horse '</code></td><td><code>0x67dA015b6A80F19822e5d270A7788F72f018a724</code></td><td>✓ unrelated</td></tr>
+<tr><td>parent-key recovery</td><td><code>matches the real parent : True</code></td><td>✓</td></tr>
+<tr><td>watch-only derivation</td><td><code>xpub-derived address matches : True</code></td><td>✓</td></tr>
+</table>
+
+<h3>The passphrase demonstration</h3>
+<p>In BIP-39 the mnemonic is the PBKDF2 <i>password</i> and the passphrase is appended to the <i>salt</i> (<code>"mnemonic" + passphrase</code>). There is no stored value to compare a passphrase against, so there is no wrong passphrase: each one produces a valid 512-bit seed and a valid wallet. <code>'correct horse'</code> and <code>'correct horse '</code> differ by one trailing space and give unrelated addresses. This allows plausible-deniability wallets, and it also means a mistyped passphrase shows an empty wallet with no error.</p>
+
+<h3>The parent-key recovery attack</h3>
+<p>For a non-hardened child with index i, BIP-32 computes</p>
+<div class="formula">I = HMAC-SHA512(c<sub>par</sub>, serP(K<sub>par</sub>) ‖ i), &nbsp;&nbsp; k<sub>child</sub> = (I<sub>L</sub> + k<sub>par</sub>) mod n &nbsp;⟹&nbsp; k<sub>par</sub> = (k<sub>child</sub> − I<sub>L</sub>) mod n</div>
+<p>The chain code c<sub>par</sub> and the public key K<sub>par</sub> are exactly the contents of the xpub, so anyone holding the xpub can compute I<sub>L</sub>. One leaked child private key then gives the parent private key by a single subtraction. In the demo I gave the function only the neutered node of <code>m/44'/60'/0'/0</code> and the private key of child 0; it returned <code>0xa29ac2cb…239b145a</code>, the real parent key, and with it I derived the private key of sibling 1. The whole branch is lost, not one address.</p>
+
+<h3>Why the same attack fails against a hardened child</h3>
+<p>For a hardened child (index ≥ 2<sup>31</sup>) the HMAC input changes to</p>
+<div class="formula">I = HMAC-SHA512(c<sub>par</sub>, 0x00 ‖ ser256(k<sub>par</sub>) ‖ i)</div>
+<p>I<sub>L</sub> now depends on the parent <b>private</b> key. To undo k<sub>child</sub> = I<sub>L</sub> + k<sub>par</sub> the attacker would first have to compute I<sub>L</sub>, which requires k<sub>par</sub>, the value being sought. The xpub contains nothing that helps. My function <b>refuses</b> a hardened index with a <code>ValueError</code>, and my tests assert that. A further test shows that the non-hardened formula applied to a hardened child gives a wrong key. For the same reason an xpub cannot derive hardened children at all, which the last line of the watch-only block shows.</p>
+<p>This is why BIP-44 hardens <code>purpose'</code>, <code>coin_type'</code> and <code>account'</code>: a leak below an account cannot climb above it.</p>
+
+<h3>The real deployment scenario</h3>
+<p>A merchant, payment processor or exchange puts an <b>account xpub on a web server</b> so that it can generate a fresh deposit address per customer without holding spending keys. Separately, one child private key leaks, for example from a hot wallet that signs withdrawals, a compromised device, or a key exported into another application. The two pieces together give the account's private key and every address under it, including all future ones. The xpub is meant to be safe to publish, so its exposure is not treated as an incident; that is what makes the combination dangerous.</p>
+
+<h2>4. Part D — post-quantum cost</h2>
+<table>
+<tr><th>Scheme</th><th>PQ</th><th class="n">pk (B)</th><th class="n">sig (B)</th><th class="n">tx (B)</th><th class="n">× ECDSA</th><th class="n">tps</th></tr>
+<tr><td>ECDSA (secp256k1)</td><td>no</td><td class="n">33</td><td class="n">72</td><td class="n">215</td><td class="n">1.0×</td><td class="n">7.75</td></tr>
+<tr><td>Schnorr (BIP-340)</td><td>no</td><td class="n">32</td><td class="n">64</td><td class="n">206</td><td class="n">1.0×</td><td class="n">8.09</td></tr>
+<tr><td>ML-DSA-44</td><td>yes</td><td class="n">1312</td><td class="n">2420</td><td class="n">3842</td><td class="n">17.9×</td><td class="n">0.43</td></tr>
+<tr><td>ML-DSA-65</td><td>yes</td><td class="n">1952</td><td class="n">3309</td><td class="n">5371</td><td class="n">25.0×</td><td class="n">0.31</td></tr>
+<tr><td>SLH-DSA-128s</td><td>yes</td><td class="n">32</td><td class="n">7856</td><td class="n">7998</td><td class="n">37.2×</td><td class="n">0.21</td></tr>
+<tr><td>FN-DSA-512</td><td>yes</td><td class="n">897</td><td class="n">666</td><td class="n">1673</td><td class="n">7.8×</td><td class="n">1.00</td></tr>
+</table>
+<p class="small">Model: one signed input, one output, 110 bytes of non-signature overhead, 1 MB block every 10 minutes. tx = 110 + pk + sig; tps = 1 000 000 / tx / 600. Output of <code>python -m crypto_lab pqc</code>; identical to the README's table.</p>
+
+<table>
+<tr><th style="width:24%">Category</th><th style="width:20%">Status</th><th>Reason</th></tr>
+<tr><td><code>p2pkh_unspent</code></td><td>PROTECTED (for now)</td><td>Only HASH160(pubkey) is on chain. Shor needs the public key; Grover only square-roots a hash search. Protection ends when the output is spent.</td></tr>
+<tr><td><code>p2pk</code></td><td>EXPOSED</td><td>The public key itself is the output script. Includes the earliest mining rewards.</td></tr>
+<tr><td><code>reused_address</code></td><td>EXPOSED</td><td>An earlier spend already published the key, and funds remain behind it.</td></tr>
+<tr><td><code>mempool_transaction</code></td><td>EXPOSED (briefly)</td><td>Between broadcast and confirmation the key is public while the coin is unspent.</td></tr>
+<tr><td><code>ethereum_any_active</code></td><td>EXPOSED</td><td><code>ecrecover</code> gives the public key from any signature, so every account that has ever sent a transaction is exposed.</td></tr>
+</table>
+
+<h3>What the table says</h3>
+<p>Shor's algorithm does not weaken ECDSA and Schnorr; it solves the discrete logarithm, so both fail completely. Replacements exist and are standardised, so the obstacle is size. A transaction grows by a factor of 8 to 37, and on a fixed block size throughput falls in the same proportion, from 7.75 tps to between 1.00 and 0.21. FN-DSA is the smallest but needs floating-point Gaussian sampling, which is hard to implement safely; SLH-DSA rests only on hash functions but has the largest signatures; ML-DSA is the middle option.</p>
+
+<h3>An asset that must stay secure for fifteen years: decide now or later?</h3>
+<p><b>Now.</b> The argument does not depend on when a quantum computer will exist.</p>
+<p>A blockchain is public and permanent. Every public key that is on chain today (P2PK outputs, reused addresses, every Ethereum account that has transacted) can be copied today and kept. This is harvest now, decrypt later: the attacker does not need the machine at the time of collection, only at some point while the asset is still worth taking. For signatures the "decryption" is computing the private key from the stored public key and spending the coins.</p>
+<p>So the relevant quantities are two durations that we do know. The asset must stay secure for X = 15 years. Migration takes Y years: choosing a scheme, changing consensus rules, upgrading wallets and hardware, and getting every holder to move coins to new outputs, which on a decentralised chain is slow and never complete. If a capable machine appears after Z years, the asset is safe only if X + Y &lt; Z. We do not know Z, but with X = 15 and Y of several years, the condition already requires that no such machine exists for about two decades. Betting an asset on that is a decision in itself. And exposure cannot be undone later: a key that is public today stays public.</p>
+<p>The costs in the table make waiting more dangerous, not less: because post-quantum signatures cut throughput by an order of magnitude, the migration cannot be rushed through in a few blocks when a threat becomes concrete. In the meantime the cheap measure is to keep keys behind hashes: never reuse an address, and move long-term holdings to outputs whose public key has never been published.</p>
+
+<h2>5. Implementation risk</h2>
+<p>A signature that verifies proves only that (r, s) is consistent with the public key. It says nothing about how k and d were handled on the way. Three ways the key can leak while every signature still verifies:</p>
+<p><b>1. Timing and power side channels.</b> In Double-and-Add the point addition runs only for the 1-bits of the scalar, so run time grows with the Hamming weight of k and a power trace shows the bits directly. Knowing k for one signature gives d = (s·k − z)/r, and even a few leaked bits per signature are enough (see 2). Mitigation: constant-time field arithmetic, a ladder with no secret-dependent branch or memory access, scalar blinding. <b>My code has this problem.</b> <code>ecdsa._sign_with_nonce</code> calls <code>curve.scalar_mul(k, G)</code>, which branches on every bit of k, and computes k⁻¹ with <code>inverse_mod</code> (<code>pow</code>), whose time depends on its operand. <code>scalar_mul_ladder</code> equalises the sequence of point operations but still branches on the bit, and Python's big integers are variable-time, so it does not fix it either. HD derivation leaks the same way through <code>private_to_public</code>.</p>
+<p><b>2. Bad nonces.</b> A repeated k gives the same r, and d follows from two signatures (Part B). A k from a weak RNG can be guessed. A k that is merely biased, for example a few top bits always zero, repeats no r, yet a lattice attack on the Hidden Number Problem recovers d from a few hundred signatures. Mitigation: RFC 6979, and never a caller-supplied nonce. In my code <code>ecdsa.sign</code> accepts a <code>nonce</code> argument for the demonstration; any caller using it reintroduces the bug, so a real API would have to remove it.</p>
+<p><b>3. Faults.</b> If a bit flips during signing (voltage glitch, Rowhammer, bad hardware) the result is a faulty signature. With deterministic nonces, a correct and a faulty signature of the same message share k but differ elsewhere, and d can be solved from the pair. Mitigation: verify every signature before releasing it, and add fresh randomness to the nonce derivation. My <code>sign</code> returns the signature without verifying it first.</p>
+<p>A fourth, mundane channel is d or k reaching logs, exception messages, swap or core dumps. My CLI prints the demo key on purpose, which is acceptable only because it is a published test key.</p>
+<p class="small">(379 words)</p>
+
+</body>
+</html>

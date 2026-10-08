@@ -1,0 +1,135 @@
+==============================================================================
+PART A -- curve arithmetic on secp256k1
+==============================================================================
+p = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f
+n = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
+G = Point(0x79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798, 0x483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8)
+G on curve : True
+
+Group law checks:
+  n*G is the identity                 : True
+  (n-1)*G + G is the identity         : True
+  G + G == 2*G                        : True
+  double-and-add == Montgomery ladder : True   (20 random scalars)
+
+Edge cases:
+  G + O == G                          : True
+  G + (-G) is the identity            : True
+  (n-1)*G == -G                       : True
+
+2G:
+  x = 0xc6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+  y = 0x1ae168fea63dc339a3c58419466ceaeef7f632653266d0e1236431a950cfe52a
+
+SEC1 serialisation of G:
+  compressed   (33 B) : 0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+  uncompressed (65 B) : 0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8
+  parse(serialise(G)) == G, both forms : True
+
+==============================================================================
+PART B -- ECDSA and the nonce
+==============================================================================
+private key d = 0xc0ffee00badc0de1234567890abcdef1122334455667788990aabbccddeeff00
+address       = 0xa0f598084F711360A38D861F8Fb2100949170C09
+
+Signature with an RFC 6979 nonce:
+  r = 0x85760d15466a56955362c0aec3f4a58d3013f16bdf18de581cc2bc383c55744f
+  s = 0x6c0877227536cd11c646e2f6457183bc8b1534f466a68dd73347d43c98882951
+  recovery id = 0
+  verifies                      : True
+  reproducible across runs      : True
+  rejects a different message   : True
+  low-s enforced (s <= n/2)     : True
+
+Public-key recovery:
+  recovered key matches signer  : True
+
+Malleability:
+  (r, n-s) also verifies        : True
+
+Nonce reuse -- two messages signed with the same k:
+  signature 1  r = 0x41eb18ff5ae68f6cb2f3c4000767e88e003f2e4af2193d3c973db291b16cec56
+               s = 0x4f31c38dc63ba7d0c1302247f0bba175951f0e86108f8cbbf4fb1e8f654f91ce
+  signature 2  r = 0x41eb18ff5ae68f6cb2f3c4000767e88e003f2e4af2193d3c973db291b16cec56
+               s = 0x5db4bccebdbc5d1a11cb889c60677205407db7e951f348b2a4f8b6c3cf4143de
+  identical r                   : True
+  original d    = 0xc0ffee00badc0de1234567890abcdef1122334455667788990aabbccddeeff00
+  recovered d   = 0xc0ffee00badc0de1234567890abcdef1122334455667788990aabbccddeeff00
+  attack succeeded : True
+
+The same attack for every low-s sign combination:
+  neither s flipped             : True
+  first s flipped               : True
+  second s flipped              : True
+  both s flipped                : True
+
+==============================================================================
+PART C -- BIP-39 / BIP-32 / BIP-44
+==============================================================================
+mnemonic   : abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+seed       : 5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc19a5ac40b389cd370d086206dec8aa6c43daea6690f20ad3d8d48b2d2ce9e38e4
+master key : 0x1837c1be8e2995ec11cda2b066151be2cfb48adf9e47b151d46adab3a21cdf67
+chain code : 7923408dadd3c7b56eed15567707ae5e5dca089de972e07f3b860450e2a3b70e
+
+Accounts:
+  m/44'/60'/0'/0/0  ->  0x9858EfFD232B4033E47d90003D41EC34EcaEda94
+  m/44'/60'/0'/0/1  ->  0x6Fac4D18c912343BF86fa7049364Dd4E424Ab9C0
+  m/44'/60'/0'/0/2  ->  0xb6716976A3ebe8D39aCEB04372f22Ff8e6802D7A
+
+Same mnemonic, different passphrase (address 0):
+  passphrase ''                ->  0x9858EfFD232B4033E47d90003D41EC34EcaEda94
+  passphrase 'correct horse'   ->  0xFf0Bdf99513306994d4aF9949BA7cfA60204D285
+  passphrase 'correct horse '  ->  0x67dA015b6A80F19822e5d270A7788F72f018a724
+
+Parent-key recovery from the xpub of m/44'/60'/0'/0 and child key /0:
+  xpub holds a private key      : False
+  recovered parent key          : 0xa29ac2cb17e31cdab42a8fe2d83f04f4b69c5e73bc8d3bf6b5dc96ac239b145a
+  matches the real parent : True
+  sibling /1 key now derivable  : True
+  same attack on a hardened child : refused -- hardened children are immune: I_L depends on the parent private key
+
+Watch-only derivation:
+  xpub-derived address matches : True
+  hardened child from an xpub  : refused -- hardened derivation requires the parent private key
+
+Addresses:
+  keccak256(b'')     = c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
+  sha3_256(b'')      = a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a   (a different function)
+  EIP-55 0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed  matches the EIP : True
+  EIP-55 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359  matches the EIP : True
+  EIP-55 0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB  matches the EIP : True
+  EIP-55 0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb  matches the EIP : True
+
+==============================================================================
+PART D -- post-quantum cost
+==============================================================================
+scheme              PQ     pk (B)  sig (B)  tx (B)   x ECDSA     tps
+--------------------------------------------------------------------
+ECDSA (secp256k1)   no         33       72     215      1.0x    7.75
+Schnorr (BIP-340)   no         32       64     206      1.0x    8.09
+ML-DSA-44           yes      1312     2420    3842     17.9x    0.43
+ML-DSA-65           yes      1952     3309    5371     25.0x    0.31
+SLH-DSA-128s        yes        32     7856    7998     37.2x    0.21
+FN-DSA-512          yes       897      666    1673      7.8x    1.00
+
+model: 1 signed input(s), 1 output, 110 B overhead, 1 MB block every 10 min
+
+Which coins can a quantum adversary actually attack?
+
+p2pkh_unspent         PROTECTED (for now)
+                      The chain holds only HASH160(pubkey). Shor's algorithm solves the discrete log of a public key and has nothing to work on here; Grover only square-roots a hash search. Protection ends when the output is spent and the key is revealed.
+
+p2pk                  EXPOSED
+                      The public key itself is the output script. This covers the earliest coinbase rewards, which have sat unmoved for over a decade.
+
+reused_address        EXPOSED
+                      An earlier spend from the address already published its public key, and funds still sit behind the same key.
+
+mempool_transaction   EXPOSED (briefly)
+                      From broadcast to confirmation the public key is visible while the coin is still unspent; an attacker who can derive the key within that window can race a conflicting spend.
+
+ethereum_any_active   EXPOSED
+                      Ethereum transactions carry (v, r, s) and the sender is found with ecrecover, so the public key of every account that has ever sent a transaction can be computed from chain data. Only never-used receiving accounts are still behind a hash.
+
+Harvest Now, Decrypt Later: the ledger is public and permanent, so every exposed public key can be collected today and attacked whenever the hardware exists. What decides the migration date is how long the asset must stay secure plus how long migration takes -- not a forecast of when a quantum computer appears.
+
